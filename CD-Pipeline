@@ -1,0 +1,66 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'DOCKER_TAG', defaultValue: 'latest', description: 'Docker Image Tag - service1')
+    }
+
+    environment {
+        IMAGE_NAME = "janani875/service1:${params.DOCKER_TAG}"
+        NETWORK_NAME = "kafka_default"
+    }
+
+    stages {
+        stage('Docker Pull') {
+            steps {
+                script {
+                    sh """
+                        docker images -q ${IMAGE_NAME} | xargs -r docker rmi || echo 'No old image to remove'
+                    """
+                    sh "docker pull ${IMAGE_NAME}"
+                }
+            }
+        }
+
+        stage('Remove Old Container') {
+            steps {
+                script {
+                    sh """
+                        if [ \$(docker ps -q -f name=service1) ]; then
+                            docker stop service1
+                            docker rm service1
+                        fi
+                    """
+                }
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                script {
+                    sh """
+                        docker run -d --name service1 \
+                        --network ${NETWORK_NAME} \
+                        -p 8082:8082 \
+                        -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092 \
+                        ${IMAGE_NAME}
+                    """
+                }
+            }
+        }
+
+        stage('Check Container') {
+            steps {
+                script {
+                    sh 'docker ps -f name=service1'
+                }
+            }
+        }
+
+        stage('Clean Up') {
+            steps {
+                echo 'Pipeline completed successfully.'
+            }
+        }
+    }
+}
